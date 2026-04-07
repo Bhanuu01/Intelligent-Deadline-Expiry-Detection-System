@@ -1,0 +1,69 @@
+volumes:
+  minio_data:
+  postgres_data:
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: "datanauts-key"
+      MINIO_ROOT_PASSWORD: "datanauts-secret"
+    healthcheck:
+      test: timeout 5s bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1
+      interval: 1s
+      timeout: 10s
+      retries: 5
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  minio-create-bucket:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 datanauts-key datanauts-secret &&
+      mc mb -p minio/mlflow-artifacts &&
+      echo 'Bucket ready'"
+
+  postgres:
+    image: postgres:16
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mlflowdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.9.0
+    restart: always
+    depends_on:
+      - postgres
+      - minio
+      - minio-create-bucket
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://0.0.0.0:8000
+      MLFLOW_SERVER_ALLOWED_HOSTS: "*"
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: "datanauts-key"
+      AWS_SECRET_ACCESS_KEY: "datanauts-secret"
+    command: >
+      /bin/sh -c "pip install psycopg2-binary boto3 &&
+      mlflow server
+      --backend-store-uri postgresql://user:password@postgres/mlflowdb
+      --artifacts-destination s3://mlflow-artifacts/
+      --serve-artifacts
+      --host 0.0.0.0
+      --port 8000"

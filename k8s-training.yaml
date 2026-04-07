@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deadline-training
+  namespace: datanauts
+  labels:
+    app: deadline-training
+    team: datanauts
+    role: training
+spec:
+  template:
+    metadata:
+      labels:
+        app: deadline-training
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: deadline-training
+          image: deadline-training:latest
+          command: ["python", "src/train_ner.py", "--model", "bert_finetune_v1"]
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-service:5000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: secret-key
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://minio-service:9000"
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: "32Gi"
+              cpu: "8"
+            requests:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+              cpu: "4"
+          volumeMounts:
+            - name: training-data
+              mountPath: /app/data
+      volumes:
+        - name: training-data
+          emptyDir: {}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+  backoffLimit: 2
+---
+# To run classifier instead, change command to:
+# ["python", "src/train_classifier.py", "--model", "roberta_clf_v3"]
+# Available NER models:      baseline | bert_finetune_v1 | bert_finetune_v2 | bert_finetune_v3 | bert_base_cased
+# Available CLF models:      baseline | roberta_clf_v1 | roberta_clf_v2 | roberta_clf_v3

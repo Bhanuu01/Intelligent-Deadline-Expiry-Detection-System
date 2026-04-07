@@ -1,0 +1,25 @@
+model:
+  name: "baseline"
+  base_model: "dslim/bert-base-NER"
+  num_labels: 3
+
+data:
+  cuad_max_samples: 500
+  synthetic_invoice_count: 300
+  max_seq_length: 128
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  seed: 42
+
+training:
+  epochs: 3
+  batch_size: 16
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  fp16: true
+
+mlflow:
+  experiment_name: "deadline-detection-ner"
+  tracking_uri: ""

@@ -1,0 +1,6 @@
+FROM deadline-training
+
+RUN pip install --no-cache-dir \
+    "ray[tune]==2.9.3" \
+    pyarrow \
+    aiohttp
